@@ -1,6 +1,7 @@
 // src/app/api/swapi/sync/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { verifyAndConsumeApiToken } from '@/lib/apiToken';
 
 type Resource =
   | 'films'
@@ -17,9 +18,7 @@ interface SwapiPage<T> {
   results: T[];
 }
 
-/* ============
-   Tipos SWAPI
-   ============ */
+/* Tipos SWAPI (igual que ya tenías) */
 
 interface SwapiFilm {
   title: string;
@@ -101,9 +100,7 @@ interface SwapiVehicle {
   url: string;
 }
 
-/* ===========================================
-   Utilidad para traer TODAS las páginas SWAPI
-   =========================================== */
+/* Utilidad para traer todas las páginas de SWAPI */
 
 async function fetchAllFromSwapi<T>(resource: Resource): Promise<T[]> {
   const baseUrl = `https://swapi.dev/api/${resource}/`;
@@ -124,23 +121,29 @@ async function fetchAllFromSwapi<T>(resource: Resource): Promise<T[]> {
   return all;
 }
 
-/* ========================
-   Endpoint POST /api/swapi/sync
-   ======================== */
-
 export async function POST(req: NextRequest) {
   try {
-    // Intentamos leer JSON; si viene vacío o malformado, devolvemos error claro.
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
+    // 1) Validar token (límite de peticiones + expiración)
+    const auth = req.headers.get('authorization') ?? '';
+    const [, rawToken] = auth.split(' ');
+
+    if (!rawToken) {
       return NextResponse.json(
-        { error: 'Body JSON inválido o vacío.' },
-        { status: 400 },
+        { error: 'Token de acceso requerido (Bearer).' },
+        { status: 401 },
       );
     }
 
+    const tokenCheck = await verifyAndConsumeApiToken(rawToken);
+    if (!tokenCheck.ok) {
+      return NextResponse.json(
+        { error: tokenCheck.error ?? 'Token inválido.' },
+        { status: 401 },
+      );
+    }
+
+    // 2) Leer recurso del body
+    const { resource } = (await req.json()) as { resource?: Resource };
     const validResources: Resource[] = [
       'films',
       'people',
@@ -149,18 +152,6 @@ export async function POST(req: NextRequest) {
       'starships',
       'vehicles',
     ];
-
-    const resource = (() => {
-      if (
-        typeof body === 'object' &&
-        body !== null &&
-        'resource' in body &&
-        typeof (body as { resource: unknown }).resource === 'string'
-      ) {
-        return (body as { resource: string }).resource as Resource;
-      }
-      return undefined;
-    })();
 
     if (!resource || !validResources.includes(resource)) {
       return NextResponse.json(
@@ -306,7 +297,7 @@ export async function POST(req: NextRequest) {
       total_swapi: totalSwapi,
       total_upsert: upsertData.length,
     });
-  } catch (error: unknown) {
+  } catch (error) {
     console.error(error);
     const message =
       error instanceof Error ? error.message : 'Error interno.';
