@@ -5,12 +5,21 @@ import { useRouter } from 'next/navigation';
 
 type Role = 'admin' | 'user';
 
+interface ContactData {
+  telefono?: string;
+  celular?: string;
+  direccion?: string;
+  ciudad?: string;
+  pais?: string;
+  [key: string]: unknown; // por si guardas más campos.
+}
+
 interface AppUser {
   id: string;
   email: string;
   role: Role;
   last_login: string | null;
-  contact_data?: unknown;
+  contact_data?: ContactData | null;
 }
 
 export default function DashboardPage() {
@@ -25,12 +34,10 @@ export default function DashboardPage() {
   const [pwdMessage, setPwdMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('swapiToken')
-      : null;
-    const userStr = typeof window !== 'undefined'
-      ? localStorage.getItem('swapiUser')
-      : null;
+    const token =
+      typeof window !== 'undefined' ? localStorage.getItem('swapiToken') : null;
+    const userStr =
+      typeof window !== 'undefined' ? localStorage.getItem('swapiUser') : null;
 
     if (!token || !userStr) {
       router.push('/login');
@@ -106,6 +113,14 @@ export default function DashboardPage() {
     ? new Date(user.last_login).toLocaleString()
     : 'Nunca';
 
+  // Normalizar datos de contacto para mostrarlos en texto plano
+  const contact: ContactData | null =
+    user.contact_data && typeof user.contact_data === 'object'
+      ? (user.contact_data as ContactData)
+      : null;
+
+  const hasContactData = contact && Object.keys(contact).length > 0;
+
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between">
@@ -131,13 +146,62 @@ export default function DashboardPage() {
         <p className="text-sm">
           <span className="font-medium">Último acceso:</span> {lastLoginText}
         </p>
+
         <div className="text-sm">
           <span className="font-medium">Datos de contacto:</span>
-          <pre className="mt-1 max-h-40 overflow-auto rounded bg-slate-100 p-2 text-xs">
-            {user.contact_data
-              ? JSON.stringify(user.contact_data, null, 2)
-              : 'Sin datos de contacto (puedes guardarlos directamente en la tabla app_users.contact_data).'}
-          </pre>
+
+          {!hasContactData && (
+            <p className="mt-1 text-sm text-slate-500">
+              Sin datos de contacto registrados.
+            </p>
+          )}
+
+          {hasContactData && (
+            <ul className="mt-1 space-y-1 rounded bg-slate-100 p-3 text-sm">
+              {contact?.telefono && (
+                <li>
+                  <span className="font-medium">Teléfono:</span> {contact.telefono}
+                </li>
+              )}
+              {contact?.celular && (
+                <li>
+                  <span className="font-medium">Celular:</span> {contact.celular}
+                </li>
+              )}
+              {contact?.direccion && (
+                <li>
+                  <span className="font-medium">Dirección:</span> {contact.direccion}
+                </li>
+              )}
+              {contact?.ciudad && (
+                <li>
+                  <span className="font-medium">Ciudad:</span> {contact.ciudad}
+                </li>
+              )}
+              {contact?.pais && (
+                <li>
+                  <span className="font-medium">País:</span> {contact.pais}
+                </li>
+              )}
+
+              {/* Campos extra que no hayas mapeado explícitamente */}
+              {Object.entries(contact ?? {})
+                .filter(
+                  ([key]) =>
+                    !['telefono', 'celular', 'direccion', 'ciudad', 'pais'].includes(
+                      key,
+                    ),
+                )
+                .map(([key, value]) => (
+                  <li key={key}>
+                    <span className="font-medium">
+                      {key.charAt(0).toUpperCase() + key.slice(1)}:
+                    </span>{' '}
+                    {String(value)}
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -159,9 +223,7 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">
-              Nueva contraseña
-            </label>
+            <label className="block text-sm font-medium">Nueva contraseña</label>
             <input
               type="password"
               className="mt-1 w-full rounded border px-3 py-2 text-sm"
